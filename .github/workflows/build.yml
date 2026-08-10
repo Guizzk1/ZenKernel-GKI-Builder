@@ -76,7 +76,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@v4
 
       - name: Free disk space
         uses: endersonmenezes/free-disk-space@v3
@@ -341,7 +341,7 @@ jobs:
 
       - name: Upload AnyKernel3 package
         if: ${{ success() }}
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v4
         with:
           name: ${{ steps.package.outputs.artifact_name }}
           # Upload the directory contents directly so that the artifact
