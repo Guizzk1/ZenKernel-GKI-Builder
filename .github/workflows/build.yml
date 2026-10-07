@@ -96,9 +96,15 @@ jobs:
           testing: false
 
       - name: Setup swap for LTO
-        uses: thejerrybao/setup-swap-space@v1
-        with:
-          swap-size-gb: 16
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Use the runner's own tools; the old swap action no longer exists.
+          sudo fallocate -l 16G /mnt/zenkernel.swap
+          sudo chmod 600 /mnt/zenkernel.swap
+          sudo mkswap /mnt/zenkernel.swap
+          sudo swapon /mnt/zenkernel.swap
+          free -h
 
       - name: Setup build environment
         id: build-environment
