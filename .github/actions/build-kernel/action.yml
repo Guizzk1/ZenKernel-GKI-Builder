@@ -93,5 +93,8 @@ runs:
         cp "$image_path" AnyKernel3/Image
 
         echo "Normal Image: $image_path"
-        echo "Embedded Linux version:"
-        strings "$image_path" | grep -m1 '^Linux version ' || true
+        kernel_release="$(cat /home/runner/out/common/include/config/kernel.release)"
+        echo "Embedded kernel release:"
+        # Android GKI also embeds the printf format "Linux version %s (%s)".
+        # Check the actual release string rather than printing that template.
+        strings "$image_path" | grep -xF -- "$kernel_release"

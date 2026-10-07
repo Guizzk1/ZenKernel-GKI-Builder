@@ -46,6 +46,10 @@ Fontes verificadas em 6 de outubro de 2026:
 | SUSFS (`gki-android12-5.10`) | v2.3.0 | `9892175b4acec7ee844e113b8d02c0f4d12cdfac` |
 
 Esses números documentam as fontes verificadas; não fixam versões futuras.
+O build completo com o toolchain oficial passou, incluindo a comparação de
+KMI e da lista de módulos, a verificação dos recursos na `.config` e o teste
+de integridade do ZIP gerado. A execução de um build não verifica o boot
+no aparelho.
 
 ## Saída
 
