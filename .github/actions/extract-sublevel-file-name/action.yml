@@ -53,6 +53,10 @@ runs:
           fi
         done
 
+        [ "$kernel_version.$patchlevel" = 5.10 ] || {
+          echo "ERROR: expected Linux 5.10, got $kernel_version.$patchlevel" >&2
+          exit 1
+        }
         kernel_real="${kernel_version}.${patchlevel}.${sublevel}"
 
         echo "KERNEL_VERSION=$kernel_version" >> "$GITHUB_ENV"

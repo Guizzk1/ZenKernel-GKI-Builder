@@ -27,27 +27,32 @@ runs:
   steps:
     - name: Clone SUSFS
       shell: bash
+      env:
+        REQUESTED_SUSFS_COMMIT: ${{ inputs.susfs_commit }}
       working-directory: ${{ github.workspace }}
       run: |
         set -euo pipefail
 
         susfs_repo="https://gitlab.com/simonpunk/susfs4ksu.git"
         susfs_branch="gki-android12-5.10"
-        requested_commit="${{ inputs.susfs_commit }}"
+        requested_commit="$REQUESTED_SUSFS_COMMIT"
 
         if [ "${{ inputs.version }}" != "android12-5.10" ]; then
           echo "ERROR: this workflow supports only android12-5.10." >&2
           exit 1
         fi
 
+        if [ -n "$requested_commit" ] && ! [[ "$requested_commit" =~ ^[0-9a-fA-F]{40}$ ]]; then
+          echo "ERROR: SUSFS commit must be a full 40-character SHA." >&2
+          exit 1
+        fi
+
         rm -rf susfs4ksu
-        git clone --branch "$susfs_branch" --single-branch "$susfs_repo" susfs4ksu
+        git clone --depth=1 --branch "$susfs_branch" --single-branch "$susfs_repo" susfs4ksu
 
         if [ -n "$requested_commit" ]; then
-          if ! git -C susfs4ksu checkout --detach "$requested_commit"; then
-            git -C susfs4ksu fetch --depth=1 origin "$requested_commit"
-            git -C susfs4ksu checkout --detach FETCH_HEAD
-          fi
+          git -C susfs4ksu fetch --depth=1 origin "$requested_commit"
+          git -C susfs4ksu checkout --detach FETCH_HEAD
         else
           git -C susfs4ksu checkout --detach "origin/$susfs_branch"
         fi
@@ -94,13 +99,14 @@ runs:
         set -euo pipefail
         cp "${{ github.workspace }}/susfs4ksu/kernel_patches/fs/"* fs/
         cp "${{ github.workspace }}/susfs4ksu/kernel_patches/include/linux/"* include/linux/
-        cp \
-          "${{ github.workspace }}/susfs4ksu/kernel_patches/50_add_susfs_in_gki-android12-5.10.patch" \
-          50_add_susfs_in_gki-android12-5.10.patch
 
     - name: Apply SUSFS kernel patch
       shell: bash
       working-directory: ${{ github.workspace }}/kernel/common
       run: |
         set -euo pipefail
-        patch --batch --forward -p1 < 50_add_susfs_in_gki-android12-5.10.patch
+        patch_file="${{ github.workspace }}/susfs4ksu/kernel_patches/50_add_susfs_in_gki-android12-5.10.patch"
+        # Validate all hunks before modifying the source tree. Do not reuse
+        # archived WildKernel fixes for older SUSFS releases on current dev-susfs.
+        patch --dry-run --batch --forward --fuzz=0 -p1 < "$patch_file"
+        patch --batch --forward --fuzz=0 --no-backup-if-mismatch -p1 < "$patch_file"

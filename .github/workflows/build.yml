@@ -42,6 +42,8 @@ on:
         value: ${{ jobs.build-gki.outputs.ksu_commit }}
       susfs_version:
         value: ${{ jobs.build-gki.outputs.susfs_version }}
+      susfs_commit:
+        value: ${{ jobs.build-gki.outputs.susfs_commit }}
       android_common_commit:
         value: ${{ jobs.build-gki.outputs.android_common_commit }}
       anykernel_commit:
@@ -67,6 +69,7 @@ jobs:
       ksu_tag: ${{ steps.metadata.outputs.ksu_tag }}
       ksu_commit: ${{ steps.metadata.outputs.ksu_commit }}
       susfs_version: ${{ steps.metadata.outputs.susfs_version }}
+      susfs_commit: ${{ steps.metadata.outputs.susfs_commit }}
       android_common_commit: ${{ steps.metadata.outputs.android_common_commit }}
       anykernel_commit: ${{ steps.metadata.outputs.anykernel_commit }}
       zip_name: ${{ steps.metadata.outputs.zip_name }}
@@ -198,9 +201,6 @@ jobs:
           echo "ccache: ${{ steps.restore-ccache.outputs.cache-hit || 'false' }}"
           echo "ThinLTO: ${{ steps.restore-lto.outputs.cache-hit || 'false' }}"
 
-      - name: Initialize config fragment
-        run: touch "${{ github.workspace }}/wild_gki.fragment"
-
       - name: Build normal Image
         env:
           SOURCE_DATE_EPOCH: ${{ env.SOURCE_DATE_EPOCH }}
@@ -305,6 +305,7 @@ jobs:
           output ksu_tag "${KSU_GIT_TAG:-}"
           output ksu_commit "${KSUN_COMMIT:-}"
           output susfs_version "${SUSFS_VERSION:-}"
+          output susfs_commit "${SUSFS_COMMIT:-}"
           output android_common_commit "${ANDROID_COMMON_COMMIT:-}"
           output anykernel_commit "${ANYKERNEL_COMMIT:-}"
           output zip_name "${ZIP_NAME:-}"
@@ -330,6 +331,7 @@ jobs:
             echo "| KernelSU Tag | ${KSU_GIT_TAG:-N/A} |"
             echo "| KernelSU Commit | \`${KSUN_COMMIT:-N/A}\` |"
             echo "| SUSFS Version | ${SUSFS_VERSION:-N/A} |"
+            echo "| SUSFS Commit | \`${SUSFS_COMMIT:-N/A}\` |"
             echo "| Feature Set | KSUN+SUSFS |"
             echo "| Variant | Normal |"
             echo "| Android Common Kernel Commit | \`${ANDROID_COMMON_COMMIT:-N/A}\` |"
@@ -344,10 +346,19 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ${{ steps.package.outputs.artifact_name }}
-          # Upload the directory contents directly so that the artifact
-          # downloaded from the Actions UI IS the flashable AnyKernel zip,
-          # with no extra outer zip wrapper around it.
-          path: ${{ github.workspace }}/AnyKernel3/
+          path: ${{ github.workspace }}/${{ steps.package.outputs.zip_name }}
           if-no-files-found: error
-          compression-level: 9
+          compression-level: 0
+
+      - name: Upload build diagnostics
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: android12-5.10-build-diagnostics
+          path: |
+            ${{ github.workspace }}/kernel-build.log
+            /home/runner/out/common/.config
+            ${{ github.workspace }}/kernel/common/**/*.rej
+          include-hidden-files: true
+          if-no-files-found: ignore
         
