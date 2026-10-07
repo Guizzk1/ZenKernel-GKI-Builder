@@ -29,6 +29,8 @@ on:
         value: ${{ jobs.build.outputs.ksu_commit }}
       susfs_version:
         value: ${{ jobs.build.outputs.susfs_version }}
+      susfs_commit:
+        value: ${{ jobs.build.outputs.susfs_commit }}
       android_common_commit:
         value: ${{ jobs.build.outputs.android_common_commit }}
       anykernel_commit:

@@ -18,6 +18,11 @@ runs:
         cat common/arch/arm64/configs/gki_defconfig
         sed -i 's/check_defconfig//' common/build.config.gki
 
+        [ "${{ inputs.version }}" = android12-5.10 ] && [ -f build/build.sh ] || {
+          echo "ERROR: Android 12 / 5.10 requires the legacy GKI build system." >&2
+          exit 1
+        }
+
         cc=clang
         cxx=clang++
         hostcc=clang
@@ -33,40 +38,42 @@ runs:
         fi
 
         ld=ld.lld
-        hostld=ld.lld
         if [ -x "${{ github.workspace }}/kernel/common/ld-wrapper" ]; then
           ld="${{ github.workspace }}/kernel/common/ld-wrapper"
-          hostld="$ld"
           echo "ThinLTO cache wrapper enabled."
         else
           echo "ThinLTO cache wrapper unavailable; continuing without cache."
         fi
 
-        if [ -f build/build.sh ]; then
-          BUILD_GKI_ARTIFACTS= \
-          BUILD_GKI_CERTIFICATION_TOOLS=0 \
-          BUILD_SYSTEM_DLKM=0 \
-          SKIP_VENDOR_BOOT=1 \
-          SKIP_EXT_MODULES=1 \
-          SKIP_CP_KERNEL_HDR=1 \
-          OUT_DIR=/home/runner/out \
-          LTO=thin \
-          BUILD_CONFIG=common/build.config.gki.aarch64 \
-          CC="$cc" \
-          CXX="$cxx" \
-          HOSTCC="$hostcc" \
-          HOSTCXX="$hostcxx" \
-          LD="$ld" \
-          HOSTLD="$hostld" \
-          build/build.sh -j"$(nproc)"
-        else
-          tools/bazel run \
-            --config=fast \
-            --config=stamp \
-            --disk_cache=/home/runner/.cache/bazel \
-            //common:kernel_aarch64_dist \
-            -- --dist_dir=/home/runner/out
-        fi
+        # build.sh resets CC/LD when LLVM=1. Pass make command-line overrides
+        # so that ccache and the ThinLTO wrapper are actually used.
+        BUILD_GKI_ARTIFACTS= \
+        BUILD_GKI_CERTIFICATION_TOOLS=0 \
+        BUILD_SYSTEM_DLKM=0 \
+        SKIP_VENDOR_BOOT=1 \
+        SKIP_EXT_MODULES=1 \
+        SKIP_CP_KERNEL_HDR=1 \
+        OUT_DIR=/home/runner/out \
+        LTO=thin \
+        BUILD_CONFIG=common/build.config.gki.aarch64 \
+        build/build.sh -j"$(nproc)" \
+          "CC=$cc" "CXX=$cxx" "HOSTCC=$hostcc" "HOSTCXX=$hostcxx" \
+          "LD=$ld" "HOSTLD=ld.lld" 2>&1 | tee "${{ github.workspace }}/kernel-build.log"
+
+    - name: Verify compiled feature configuration
+      shell: bash
+      run: |
+        set -euo pipefail
+        config=/home/runner/out/common/.config
+        while IFS= read -r line; do
+          [[ "$line" == CONFIG_KSU*=y ]] || continue
+          grep -qxF "$line" "$config" || {
+            echo "ERROR: requested feature missing in generated .config: $line" >&2
+            exit 1
+          }
+        done < "${{ github.workspace }}/kernel/common/arch/arm64/configs/gki_defconfig"
+        grep -qxF CONFIG_MODVERSIONS=y "$config"
+        grep -qxF CONFIG_ARM64_4K_PAGES=y "$config"
 
     - name: Gather normal Image
       shell: bash
@@ -86,5 +93,8 @@ runs:
         cp "$image_path" AnyKernel3/Image
 
         echo "Normal Image: $image_path"
-        echo "Embedded Linux version:"
-        strings "$image_path" | grep -m1 '^Linux version ' || true
+        kernel_release="$(cat /home/runner/out/common/include/config/kernel.release)"
+        echo "Embedded kernel release:"
+        # Android GKI also embeds the printf format "Linux version %s (%s)".
+        # Check the actual release string rather than printing that template.
+        strings "$image_path" | grep -xF -- "$kernel_release"

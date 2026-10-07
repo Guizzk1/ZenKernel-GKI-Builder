@@ -5,6 +5,10 @@ permissions:
   actions: read
 
 on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/**'
   workflow_dispatch:
     inputs:
       release_type:
@@ -34,7 +38,7 @@ jobs:
     with:
       config_file: .github/config/android12-5.10.json
       feature_set: KSUN+SUSFS
-      susfs_commit: ${{ inputs.susfs_commit }}
+      susfs_commit: ${{ inputs.susfs_commit || '' }}
     secrets: inherit
 
   summary:
@@ -53,6 +57,7 @@ jobs:
           KSU_TAG: ${{ needs.build-android12-5-10.outputs.ksu_tag }}
           KSU_COMMIT: ${{ needs.build-android12-5-10.outputs.ksu_commit }}
           SUSFS_VERSION: ${{ needs.build-android12-5-10.outputs.susfs_version }}
+          SUSFS_COMMIT: ${{ needs.build-android12-5-10.outputs.susfs_commit }}
           ANDROID_COMMON_COMMIT: ${{ needs.build-android12-5-10.outputs.android_common_commit }}
           ANYKERNEL_COMMIT: ${{ needs.build-android12-5-10.outputs.anykernel_commit }}
           ZIP_NAME: ${{ needs.build-android12-5-10.outputs.zip_name }}
@@ -89,6 +94,7 @@ jobs:
             echo "| KernelSU Tag | $(value_or_na "$KSU_TAG") |"
             echo "| KernelSU Commit | \`$(value_or_na "$KSU_COMMIT")\` |"
             echo "| SUSFS Version | $(value_or_na "$SUSFS_VERSION") |"
+            echo "| SUSFS Commit | \`$(value_or_na "$SUSFS_COMMIT")\` |"
             echo "| Feature Set | KSUN+SUSFS |"
             echo "| Variant | Normal |"
             echo "| Android Common Kernel Commit | \`$(value_or_na "$ANDROID_COMMON_COMMIT")\` |"
@@ -143,17 +149,15 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: ${{ needs.build-android12-5-10.outputs.artifact_name }}
-          path: anykernel3-staging
+          path: release-assets
 
-      - name: Repackage and verify release ZIP
+      - name: Verify original release ZIP
         env:
           ZIP_NAME: ${{ needs.build-android12-5-10.outputs.zip_name }}
           BUILD_SHA256: ${{ needs.build-android12-5-10.outputs.zip_sha256 }}
         run: |
           set -euo pipefail
-          mkdir -p release-assets
           zip_path="release-assets/$ZIP_NAME"
-          (cd anykernel3-staging && zip -r -q -9 "../$zip_path" .)
           [ -f "$zip_path" ] || {
             echo "ERROR: release ZIP was not created: $zip_path" >&2
             exit 1
@@ -163,7 +167,8 @@ jobs:
           echo "Actual SHA-256:   $actual_sha256"
           echo "Build SHA-256:    $BUILD_SHA256"
           if [ "$actual_sha256" != "$BUILD_SHA256" ]; then
-            echo "::warning::SHA-256 mismatch (repackaging may alter zip metadata; contents are identical)"
+            echo "::error::Release ZIP does not match the compiled package SHA-256."
+            exit 1
           fi
           echo "RELEASE_ZIP_SHA256=$actual_sha256" >> "$GITHUB_ENV"
 
@@ -175,6 +180,7 @@ jobs:
           KSU_TAG: ${{ needs.build-android12-5-10.outputs.ksu_tag }}
           KSU_COMMIT: ${{ needs.build-android12-5-10.outputs.ksu_commit }}
           SUSFS_VERSION: ${{ needs.build-android12-5-10.outputs.susfs_version }}
+          SUSFS_COMMIT: ${{ needs.build-android12-5-10.outputs.susfs_commit }}
           ANDROID_COMMON_COMMIT: ${{ needs.build-android12-5-10.outputs.android_common_commit }}
           ANYKERNEL_COMMIT: ${{ needs.build-android12-5-10.outputs.anykernel_commit }}
           ZIP_NAME: ${{ needs.build-android12-5-10.outputs.zip_name }}
@@ -186,7 +192,7 @@ jobs:
             echo "- Kernel: $KERNEL_REAL"
             echo "- Kernel release: \`$KERNEL_RELEASE\`"
             echo "- KernelSU Next: $KSU_VERSION ($KSU_TAG, \`$KSU_COMMIT\`)"
-            echo "- SUSFS: $SUSFS_VERSION"
+            echo "- SUSFS: $SUSFS_VERSION (\`$SUSFS_COMMIT\`)"
             echo "- Feature Set: KSUN+SUSFS"
             echo "- Variant: Normal"
             echo "- Android Common Kernel: \`$ANDROID_COMMON_COMMIT\`"
